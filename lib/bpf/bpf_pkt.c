@@ -396,14 +396,14 @@ bpf_tx_callback_mb_jit(__rte_unused uint16_t port, __rte_unused uint16_t queue,
 static rte_rx_callback_fn
 select_rx_callback(enum rte_bpf_arg_type type, uint32_t flags)
 {
-	if (flags & RTE_BPF_ETH_F_JIT) {
-		if (type == RTE_BPF_ARG_PTR)
-			return bpf_rx_callback_jit;
-		else if (type == RTE_BPF_ARG_PTR_MBUF)
+	if (flags & RTE_BPF_ETH_F_JIT) { // jit
+		if (type == RTE_BPF_ARG_PTR) // pointer to data buffer
+			return bpf_rx_callback_jit; 
+		else if (type == RTE_BPF_ARG_PTR_MBUF) // pointer to rte_mbuf
 			return bpf_rx_callback_mb_jit;
-	} else if (type == RTE_BPF_ARG_PTR)
+	} else if (type == RTE_BPF_ARG_PTR) // point to data buffer
 		return bpf_rx_callback_vm;
-	else if (type == RTE_BPF_ARG_PTR_MBUF)
+	else if (type == RTE_BPF_ARG_PTR_MBUF) // pointer to rte_mbuf
 		return bpf_rx_callback_mb_vm;
 
 	return NULL;
@@ -492,22 +492,22 @@ bpf_eth_elf_load(struct bpf_eth_cbh *cbh, uint16_t port, uint16_t queue,
 	const struct rte_bpf_prm *prm, const char *fname, const char *sname,
 	uint32_t flags)
 {
-	int32_t rc;
-	struct bpf_eth_cbi *bc;
-	struct rte_bpf *bpf;
-	rte_rx_callback_fn frx;
-	rte_tx_callback_fn ftx;
-	struct rte_bpf_jit jit;
+	int32_t rc; // 返回值
+	struct bpf_eth_cbi *bc; // information about installed BPF rx/tx callback
+	struct rte_bpf *bpf; // bpf struct
+	rte_rx_callback_fn frx; // rx callback function的指针？
+	rte_tx_callback_fn ftx; // tx callback function
+	struct rte_bpf_jit jit; // jit struct
 
 	frx = NULL;
 	ftx = NULL;
 
 	if (prm == NULL || rte_eth_dev_is_valid_port(port) == 0 ||
 			queue >= RTE_MAX_QUEUES_PER_PORT)
-		return -EINVAL;
+		return -EINVAL; // linux errno.h 22 invalid argument
 
-	if (cbh->type == BPF_ETH_RX)
-		frx = select_rx_callback(prm->prog_arg.type, flags);
+	if (cbh->type == BPF_ETH_RX) // installed BPF rx callback
+		frx = select_rx_callback(prm->prog_arg.type, flags); //  jit/mb_jit/vm/mb_vm 
 	else
 		ftx = select_tx_callback(prm->prog_arg.type, flags);
 
@@ -517,11 +517,23 @@ bpf_eth_elf_load(struct bpf_eth_cbh *cbh, uint16_t port, uint16_t queue,
 		return -EINVAL;
 	}
 
-	bpf = rte_bpf_elf_load(prm, fname, sname);
+	// create a new eBPF execution context and load given BPF code into it.
+	// returns BPF handle that is used in future BPF operations, or NULL or error in rte_errno
+	bpf = rte_bpf_elf_load(prm, fname, sname); // rte_bpf.h 
 	if (bpf == NULL)
 		return -rte_errno;
 
-	rte_bpf_get_jit(bpf, &jit);
+	// provide information about natively compiled code for given BPF handle.
+	/*
+		参数：
+			bpf —— handle for the BPF code
+			jit —— pointer to the rte_bpf_jit structure to be filled with related data
+		
+		returns：
+			-EINVAL if the parameter are invalid
+			Zero if operation completely successfully
+	*/
+	rte_bpf_get_jit(bpf, &jit); // rte_bpf.h
 
 	if ((flags & RTE_BPF_ETH_F_JIT) != 0 && jit.func == NULL) {
 		RTE_BPF_LOG(ERR, "%s(%u, %u): no JIT generated;\n",
@@ -530,7 +542,22 @@ bpf_eth_elf_load(struct bpf_eth_cbh *cbh, uint16_t port, uint16_t queue,
 		return -ENOTSUP;
 	}
 
-	/* setup/update global callback info */
+	/* setup/update global callback info  return bpf_eth_cbi*  */ 
+
+	/*
+		// information about installed BPF rx/tx callback
+		struct bpf_eth_cbi{
+			// used by both date & control path
+			uint32_t use; // usage counter
+			const struct rte_eth_rxtx_callback *cb; // callback handle
+			struct rte_bpf *bpf; // BPF handle that is used in future BPF operations
+			struct rte_bpf_jit jit; // Information about compiled into native ISA eBPF code.
+			// used by control path only
+			LIST_ENTRY(bpf_eth_cbi) link;
+			uint16_t port;
+			uint16_t queue;
+		} __rte_cache_aligned;
+	*/
 	bc = bpf_eth_cbh_add(cbh, port, queue);
 	if (bc == NULL)
 		return -ENOMEM;
@@ -539,11 +566,19 @@ bpf_eth_elf_load(struct bpf_eth_cbh *cbh, uint16_t port, uint16_t queue,
 	if (bc->cb != NULL)
 		bpf_eth_unload(cbh, port, queue);
 
-	bc->bpf = bpf;
-	bc->jit = jit;
+	bc->bpf = bpf; // rte_bpf* 
+	bc->jit = jit; // rte_bpf_jit
 
 	if (cbh->type == BPF_ETH_RX)
-		bc->cb = rte_eth_add_rx_callback(port, queue, frx, bc);
+		// callback handle 
+		/* 
+			rte_eth_add_rx_callback rte_ethdev.h中定义，在rte_ethdev.c中实现
+			return NULL or error.
+			On success, a pointer value which can later be used to remove the callback.
+			frx —— 回调函数的函数指针
+
+		*/
+		bc->cb = rte_eth_add_rx_callback(port, queue, frx, bc); 
 	else
 		bc->cb = rte_eth_add_tx_callback(port, queue, ftx, bc);
 

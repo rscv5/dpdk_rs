@@ -27,7 +27,11 @@
 #include <rte_mbuf_core.h>
 #include <arpa/inet.h>
 
-extern void rte_pktmbuf_dump(FILE *, const struct rte_mbuf *, unsigned int);
+extern void rte_pktmbuf_dump(FILE *, const struct rte_mbuf *, unsigned int); // rte_mbuf.h
+
+extern uint32_t pls_mac(const struct rte_mbuf*){
+	return 21;
+}
 
 uint64_t
 entry(const void *pkt)

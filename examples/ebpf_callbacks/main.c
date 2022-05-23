@@ -9,6 +9,7 @@
 #include <rte_mbuf_dyn.h>
 #include <net/ethernet.h>
 #include <netinet/ip.h>
+#include <netinet/tcp.h>
 #include <arpa/inet.h>
 
 #include <rte_common.h>
@@ -50,31 +51,52 @@ static const struct rte_bpf_xsym bpf_xsym[] = {
                 .var = {
                         .val = (void *)(uintptr_t)&stdout,
                         .desc = {
-                                .type = RTE_BPF_ARG_PTR,
+                                .type = RTE_BPF_ARG_PTR, // point to data buffer
                                 .size = sizeof(stdout),
                         },
                 },
         },
         {
-                .name = RTE_STR(rte_pktmbuf_dump),
+                .name = RTE_STR(rte_pktmbuf_dump), //RTE_STR 获得字符串
                 .type = RTE_BPF_XTYPE_FUNC,
                 .func = {
-                        .val = (void *)rte_pktmbuf_dump,
-                        .nb_args = 3,
-                        .args = {
+                        .val = (void *)rte_pktmbuf_dump, 
+                        .nb_args = 3, // 参数数量
+                        .args = {  // 函数参数描述
                                 [0] = {
-                                        .type = RTE_BPF_ARG_RAW,
+                                        .type = RTE_BPF_ARG_RAW, //
                                         .size = sizeof(uintptr_t),
                                 },
                                 [1] = {
-                                        .type = RTE_BPF_ARG_PTR_MBUF,
+                                        .type = RTE_BPF_ARG_PTR_MBUF, // point to rte_mbuf
                                         .size = sizeof(struct rte_mbuf),
                                 },
                                 [2] = {
-                                        .type = RTE_BPF_ARG_RAW,
+                                        .type = RTE_BPF_ARG_RAW, // scalar value
                                         .size = sizeof(uint32_t),
                                 },
                         },
+                        
+                },
+        },
+        {
+                .name = RTE_STR(pls_mac),
+                .type = RTE_BPF_XTYPE_FUNC,
+                .func = {
+                    .val = (void *)pls_mac,
+                    .nb_args = 1,
+                    .args = {
+                        [0] = {
+                            .type = RTE_BPF_ARG_PTR_MBUF,
+                            .size = sizeof(struct rte_mbuf),
+                        },
+                    },
+                    .rte = {
+                        [0] = {
+                            .type = RTE_BPF_ARG_RAW,
+                            .size = sizeof(uint32_t),
+                        }
+                    },
                 },
         },
 };
@@ -107,17 +129,25 @@ static void bpf_callback_rx(const char *fanme, uint16_t port, uint16_t queue, co
 #define MAC_ARG(p) p[0],p[1],p[2],p[3],p[4],p[5]
 #define IP_ARG(q)  q[0],q[1],q[2]
 static int64_t
-prs_ip(struct ether_header *eth){
+prs_tcp(const struct iphdr *iph){
+    struct tcphdr *tcph = (void *)(iph+1);
+    printf("source:%d dest:%d\n", ntohs(tcph->source), ntohs(tcph->dest);
+    return 0;
+}
+
+static int64_t
+prs_ip(const struct ether_header *eth){
         struct iphdr *iph = (void *)(eth + 1);
         struct in_addr s;
         s.s_addr = iph->saddr;
-        printf("src ip : %s ",inet_ntoa(s));
+        printf("\t src ip : %s ",inet_ntoa(s));
         s.s_addr = iph->daddr;
         printf("\t des ip : %s", inet_ntoa(s));
         //printf("\t protocol:%d \n", iph->protocol);
         switch(iph->protocol){
                 case 0x06:
-                        printf("\t protocol: TCP\n");
+                        printf("\t protocol: TCP");
+                        prs_tcp(iph);
                         break;
                 case 0x11:
                         printf("\t protocol: UDP\n");
@@ -138,7 +168,7 @@ entry(void *pkt){
         eth = rte_pktmbuf_mtod(mb, const struct ether_header *);
         // print mac_h_dest
         printf("\th_sest:%02x:%02x:%02x:%02x:%02x:%02x", MAC_ARG(eth->ether_shost));
-        printf("\th_dest:%02x:%02x:%02x:%02x:%02x:%02x", MAC_ARG(eth->ether_dhost));
+        printf("\th_dest:%02x:%02x:%02x:%02x:%02x:%02x \n", MAC_ARG(eth->ether_dhost));
         //printf("\teth_type: %04x", (short)eth->ether_type);
         switch(htons(eth->ether_type)){
                 case 0x0806:
@@ -149,7 +179,7 @@ entry(void *pkt){
                         break;
                 case 0x0800:
                         // 解析IPV4
-                        printf("\tprotocol: IPv4\t");
+                        printf("\tprotocol: IPv4");
                         prs_ip(eth);
                         break;
                 case 0x86DD:
@@ -306,7 +336,7 @@ port_init(uint16_t port, struct rte_mempool *mbuf_pool)
                 4. 传递给回调函数的参数指针
            返回值是一个指针，可以用于删除回调的API
          */
-        rte_eth_add_rx_callback(port, 0, ebpf_callbacks, NULL);
+        rte_eth_add_rx_callback(port, 0, ebpf_callback, NULL);
         /* >8 End of RX and TX callbacks. */
 
         return 0;
