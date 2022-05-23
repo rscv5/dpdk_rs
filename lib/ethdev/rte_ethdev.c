@@ -4742,15 +4742,26 @@ rte_eth_add_rx_callback(uint16_t port_id, uint16_t queue_id,
 		rte_errno = EINVAL;
 		return NULL;
 	}
+	// 申请空间 
 	struct rte_eth_rxtx_callback *cb = rte_zmalloc(NULL, sizeof(*cb), 0);
+	// struct rte_eth_rxtx_callback **prev_cb;
+	// rte_ethdev.h中 struct rte_eth_rxtx_callback;
 
 	if (cb == NULL) {
 		rte_errno = ENOMEM;
 		return NULL;
 	}
 
-	cb->fn.rx = fn;
+	// rte_ethdev.h 
+	/*  Function type used for Rx packet processing packet callbacks.
+		typedef uint16_t(*rte_rx_callback_fn)(uint16_t port_id, uint16_t queue,
+					struct rte_mbuf *pkts[], uint16_t nb_pkts, uint16_t max_pkts,
+					void *user_param);
+		returns the number of pacekets returned to the user.
+	*/
+	cb->fn.rx = fn; // fn
 	cb->param = user_param;
+	
 
 	rte_spinlock_lock(&eth_dev_rx_cb_lock);
 	/* Add the callbacks in fifo order. */

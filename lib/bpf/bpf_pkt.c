@@ -579,6 +579,7 @@ bpf_eth_elf_load(struct bpf_eth_cbh *cbh, uint16_t port, uint16_t queue,
 
 		*/
 		bc->cb = rte_eth_add_rx_callback(port, queue, frx, bc); 
+		// bc->key_num 
 	else
 		bc->cb = rte_eth_add_tx_callback(port, queue, ftx, bc);
 
