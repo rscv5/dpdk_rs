@@ -223,6 +223,37 @@ pkt_filter_jit(const struct rte_bpf_jit *jit, struct rte_mbuf *mb[],
 	return num;
 }
 
+//////////////////////////////////////////////////////////////////////////////////
+// 1.
+static inline uint32_t
+pkt_test_jit(const struct rte_bpf_jit *jit, struct hash_mbuf *my_par,
+         uint32_t num, uint32_t drop)
+{
+    uint32_t i, n;
+    // void *dp;
+    uint64_t rc[num];
+    // char h_key[128];
+    struct rte_mbuf **mb;  //  如果模仿pkt_filter_jit 设为 *mb[] 会报错 array size missing in mb
+
+    mb = my_par->mbuf;
+    // h_key = my_par->hash_key;
+
+    // 循环遍历
+    n = 0;
+    for(i = 0; i != num; i++){
+        // dp = my_par;
+        rc[i] = jit->func(my_par);
+        n += (rc[i] == 0);
+    }
+    
+    if(n != 0)
+        num = apply_filter(mb, rc, num, drop);
+    
+    return num;
+
+}
+
+//////////////////////////////////////////////////////////////////////////////
 static inline uint32_t
 pkt_filter_mb_vm(const struct rte_bpf *bpf, struct rte_mbuf *mb[], uint32_t num,
 	uint32_t drop)
@@ -290,6 +321,28 @@ bpf_rx_callback_jit(__rte_unused uint16_t port, __rte_unused uint16_t queue,
 	bpf_eth_cbi_unuse(cbi);
 	return rc;
 }
+
+///////////////////////////////////////////////////////////////////////
+// 2. 
+static uint16_t
+bpf_rx_callback_jit_test(__rte_unused uint16_t port, __rte_unused uint16_t queue,
+    //struct rte_mbuf *pkt[], 
+    uint16_t nb_pkts, struct hash_mbuf *my_par,
+    __rte_unused uint16_t max_pkts, void *user_param)
+{
+    struct bpf_eth_cbi *cbi; // information about
+    uint16_t rc; 
+
+    cbi = user_param;
+    bpf_eth_cbi_inuse(cbi); // marks given callback as used by datapath
+    rc = (cbi->cb != NULL) ?
+        pkt_test_jit(&cbi->jit, my_par, nb_pkts, 0):
+        nb_pkts;
+    bpf_eth_cbi_unuse(cbi);
+    return rc;
+}
+
+//////////////////////////////////////////////////////////////////////
 
 static uint16_t
 bpf_tx_callback_vm(__rte_unused uint16_t port, __rte_unused uint16_t queue,
@@ -598,6 +651,77 @@ bpf_eth_elf_load(struct bpf_eth_cbh *cbh, uint16_t port, uint16_t queue,
 	return rc;
 }
 
+////////////////////////////////////////////////////////////////////////
+// 3. 
+static int
+bpf_eth_elf_load_test(struct bpf_eth_cbh *cbh, uint16_t port, uint16_t queue,
+        const struct rte_bpf_prm *prm, const char *fname, const char *sname,
+        uint32_t flags)
+{
+    int32_t rc; // 返回值
+    struct bpf_eth_cbi *bc; // information about installed BPF rx/tx callback
+    struct rte_bpf *bpf; // bpf struct
+    rte_rx_callback_fn frx; // pointer to rx callback function
+    struct rte_bpf_jit jit; // jit struct
+    
+    frx = NULL;
+
+    if(prm == NULL || rte_eth_dev_is_valid_port(port) == 0 ||
+        queue >= RTE_MAX_QUEUES_PER_PORT)
+        return -EINVAL;
+    
+    // flags & RTE_BPF_ETH_F_JIT 
+    // rte_bpf_arg_type type == RTE_BPF_ARG_PTR pointer to data buffer
+    frx = bpf_rx_callback_jit_test; 
+
+    if(frx == NULL){
+        RTE_BPF_LOG(ERR, "%s(%u, %u): no callback selected;\n",
+        __func__, port, queue);
+        return -EINVAL;
+    }
+
+    // create a new eBPF execution context and load BPF code into it
+    bpf = rte_bpf_elf_load(prm, fname, sname); // rye_bpf.h
+    if(bpf == NULL)
+        return -rte_errno;
+    
+    // provide information about natively compiled code for given BPF handle
+    rte_bpf_get_jit(bpf, &jit); // rte_bpf.h
+
+    if((flags & RTE_BPF_ETH_F_JIT) != 0 && jit.func == NULL){
+        RTE_BPF_LOG(ERR, "%s(%u, %u): no JIT generated;\n",
+            __func__, port, queue);
+        rte_bpf_destroy(bpf);
+        return -ENOTSUP;
+    }
+
+    // setup/update global callback info 
+    // return bpf_eth_cbi*
+    bc = bpf_eth_cbh_add(cbh, port, queue);
+    if(bc == NULL)
+        return -ENOMEN;
+    
+    if(bc->cb != NULL)
+        bpf_eth_unload(cbh, port, queue);
+    
+    bc->bpf = bpf; // rte_bpf *
+    bc->jit = jit; // rte_bpf_jit
+
+    //if(cbh->type == BPF_ETH_RX)
+    bc->cb = rte_eth_add_rx_callback(port, queue, frx, bc);
+
+    if(bc->cb == NULL){
+        rc = -rte_errno;
+        rte_bpf_destroy(bpf);
+        bpf_eth_cbi_cleanup(bc);
+    } else{
+        rc = 0;
+    }
+
+    return rc;
+}
+
+////////////////////////////////////////////////////////////////////////
 int
 rte_bpf_eth_rx_elf_load(uint16_t port, uint16_t queue,
 	const struct rte_bpf_prm *prm, const char *fname, const char *sname,
@@ -614,6 +738,24 @@ rte_bpf_eth_rx_elf_load(uint16_t port, uint16_t queue,
 	return rc;
 }
 
+/////////////////////////////////////////////////////////////////
+// 4.
+int
+rte_bpf_eth_rx_elf_load_test(uint16_t port, uint16_t queue,
+    const struct rte_bpf_prm *prm, const char *fname, const char *sname,
+     uint32_t flags)
+{
+        int32_t rc;
+        struct bpf_eth_cbh *cbh;
+
+        cbh = &rx_cbh;
+        rte_spinlock_lock(&cbh->lock);
+        rc = bpf_eth_elf_load_test(cbh, port, queue, prm, fname, sname, flags);
+        rte_spinlock_unlock(&cbh->lock);
+
+        return rc;
+}
+//////////////////////////////////////////////////////////////////////
 int
 rte_bpf_eth_tx_elf_load(uint16_t port, uint16_t queue,
 	const struct rte_bpf_prm *prm, const char *fname, const char *sname,
