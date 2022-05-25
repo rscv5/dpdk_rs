@@ -2,6 +2,7 @@
 #include <inttypes.h>
 #include <getopt.h>
 #include <rte_eal.h>
+
 #include <rte_ethdev.h>
 #include <rte_cycles.h>
 #include <rte_lcore.h>
@@ -15,6 +16,8 @@
 #include <rte_common.h>
 #include <rte_errno.h>
 #include <rte_bpf.h>
+#include <rte_bpf_ethdev.h>
+
 
 #define RX_RING_SIZE 1024  // 接收环大小
 #define TX_RING_SIZE 1024  // 发送环大小
@@ -23,26 +26,26 @@
 #define MBUF_CACHE_SIZE 250
 #define BURST_SIZE 32 // burst收发包模式的一次完成多个数据包的收发
 
-static int hwts_dynfield_offset = -1;
+// static int hwts_dynfield_offset = -1;
 
-static inline rte_mbuf_timestamp_t *
-hwts_field(struct rte_mbuf *mbuf)
-{
-        return RTE_MBUF_DYNFIELD(mbuf,
-                        hwts_dynfield_offset, rte_mbuf_timestamp_t *);
-}
+// static inline rte_mbuf_timestamp_t *
+// hwts_field(struct rte_mbuf *mbuf)
+// {
+//         return RTE_MBUF_DYNFIELD(mbuf,
+//                         hwts_dynfield_offset, rte_mbuf_timestamp_t *);
+// }
 
-typedef uint64_t tsc_t;
-static int tsc_dynfield_offset = -1;
+// typedef uint64_t tsc_t;
+// static int tsc_dynfield_offset = -1;
 
-static inline tsc_t *
-tsc_field(struct rte_mbuf *mbuf)
-{
-        return RTE_MBUF_DYNFIELD(mbuf, tsc_dynfield_offset, tsc_t *);
-}
+// static inline tsc_t *
+// tsc_field(struct rte_mbuf *mbuf)
+// {
+//         return RTE_MBUF_DYNFIELD(mbuf, tsc_dynfield_offset, tsc_t *);
+// }
 
-static const char usage[] =
-        "%s EAL_ARGS -- [-t]\n";
+// static const char usage[] =
+//         "%s EAL_ARGS -- [-t]\n";
 
 static const struct rte_bpf_xsym bpf_xsym[] = {
         {
@@ -79,34 +82,16 @@ static const struct rte_bpf_xsym bpf_xsym[] = {
                         
                 },
         },
-        {
-                .name = RTE_STR(pls_mac),
-                .type = RTE_BPF_XTYPE_FUNC,
-                .func = {
-                    .val = (void *)pls_mac,
-                    .nb_args = 1,
-                    .args = {
-                        [0] = {
-                            .type = RTE_BPF_ARG_PTR_MBUF,
-                            .size = sizeof(struct rte_mbuf),
-                        },
-                    },
-                    .rte = {
-                        [0] = {
-                            .type = RTE_BPF_ARG_RAW,
-                            .size = sizeof(uint32_t),
-                        }
-                    },
-                },
-        },
 };
 
 
-static void bpf_callback_rx(const char *fanme, uint16_t port, uint16_t queue, const char *sname){
+
+static void bpf_callback_rx(const char *fname, uint16_t port, uint16_t queue, const char *sname){
         int32_t rc;
         uint32_t flags;
         struct rte_bpf_prm prm;
         struct rte_bpf_arg arg;
+        //struct hash_mbuf my_par; // rte_mbuf_core.h 
 
         flags = RTE_BPF_ETH_F_NONE;
         flags |= RTE_BPF_ETH_F_JIT;
@@ -115,13 +100,19 @@ static void bpf_callback_rx(const char *fanme, uint16_t port, uint16_t queue, co
         arg.size = sizeof(struct rte_mbuf);
         arg.buf_size = RTE_MBUF_DEFAULT_BUF_SIZE; // 每个mbuf的数据缓冲区大小
 
+        // arg.type = RTE_BPF_ARG_PTR; // pointer to data buffer
+        // arg.size = sizeof(struct hash_mbuf);
+        // arg.buf_size = RTE_MBUF_DEFAULT_BUF_SIZE; // 每个mbuf的数据缓冲区的大小
+
         memset(&prm, 0, sizeof(prm));
         prm.xsym = bpf_xsym;
         prm.nb_xsym = RTE_DIM(bpf_xsym);
-        prm.pro_arg = arg;
+        prm.prog_arg = arg;
 
-        printf(">>>>>>>>>");
-        rc = rte_bpf_eth_rx_elf_load(port, queue, &prm, fanme, sname, flags);
+        //printf(">>>>>>>>>");
+        rc = rte_bpf_eth_rx_elf_load(port, queue, &prm, fname, sname, flags);
+        // rte_bpf_ethdev.h bpf_load_test.c
+        //rc = rte_bpf_eth_rx_elf_load_test(port, queue, &prm, fname, sname);
         printf("%d:%s\n",rc, strerror(-rc));       
 }
 
@@ -131,7 +122,7 @@ static void bpf_callback_rx(const char *fanme, uint16_t port, uint16_t queue, co
 static int64_t
 prs_tcp(const struct iphdr *iph){
     struct tcphdr *tcph = (void *)(iph+1);
-    printf("source:%d dest:%d\n", ntohs(tcph->source), ntohs(tcph->dest);
+    printf("source:%d dest:%d\n", ntohs(tcph->source), ntohs(tcph->dest));
     return 0;
 }
 
@@ -242,9 +233,9 @@ port_init(uint16_t port, struct rte_mempool *mbuf_pool)
                 return retval;
         }
 
-        if (dev_info.tx_offload_capa & RTE_ETH_TX_OFFLOAD_MBUF_FAST_FREE)
-                port_conf.txmode.offloads |=
-                        RTE_ETH_TX_OFFLOAD_MBUF_FAST_FREE;
+        // if (dev_info.tx_offload_capa & RTE_ETH_TX_OFFLOAD_MBUF_FAST_FREE)
+        //         port_conf.txmode.offloads |=
+        //                 RTE_ETH_TX_OFFLOAD_MBUF_FAST_FREE;
 
         // 配置设备网卡
         /* 四个参数：
@@ -327,7 +318,7 @@ port_init(uint16_t port, struct rte_mempool *mbuf_pool)
         //         return retval;
 
         // fname, port, queue, sname
-        bpf_callback_rx('home/dpdk-stable-19.11.12/examples/bpf/t4.o', port, 0, '.text');
+        bpf_callback_rx("/home/dpdk-stable-19.11.12/examples/bpf/t3.o", port, 0, ".text");
 
         /* RX and TX callbacks are added to the ports. 
                 1. port id
@@ -351,7 +342,7 @@ port_init(uint16_t port, struct rte_mempool *mbuf_pool)
  * Main thread that does the work, reading from INPUT_PORT
  * and writing to OUTPUT_PORT
  */
-static  __rte_noreturn void
+static __rte_noreturn void
 lcore_main(void)
 {
         uint16_t port;

@@ -208,12 +208,12 @@ pkt_filter_jit(const struct rte_bpf_jit *jit, struct rte_mbuf *mb[],
 {
 	uint32_t i, n;
 	void *dp;
-	uint64_t rc[num];
+	uint64_t rc[num]; // 是否丢包flag
 
-	n = 0;
+	n = 0; // 统计丢包个数
 	for (i = 0; i != num; i++) {
-		dp = rte_pktmbuf_mtod(mb[i], void *);
-		rc[i] = jit->func(dp);
+		dp = rte_pktmbuf_mtod(mb[i], void *); 
+		rc[i] = jit->func(dp); // 调用entry 只能有一个参数？ 
 		n += (rc[i] == 0);
 	}
 
@@ -240,14 +240,14 @@ pkt_filter_mb_jit(const struct rte_bpf_jit *jit, struct rte_mbuf *mb[],
 	uint32_t i, n;
 	uint64_t rc[num];
 
-	n = 0;
+	n = 0; // 丢包数量统计
 	for (i = 0; i != num; i++) {
-		rc[i] = jit->func(mb[i]);
+		rc[i] = jit->func(mb[i]); // entry 
 		n += (rc[i] == 0);
 	}
 
 	if (n != 0)
-		num = apply_filter(mb, rc, num, drop);
+		num = apply_filter(mb, rc, num, drop); // 丢包过滤
 
 	return num;
 }
@@ -279,12 +279,12 @@ bpf_rx_callback_jit(__rte_unused uint16_t port, __rte_unused uint16_t queue,
 	struct rte_mbuf *pkt[], uint16_t nb_pkts,
 	__rte_unused uint16_t max_pkts, void *user_param)
 {
-	struct bpf_eth_cbi *cbi;
-	uint16_t rc;
+	struct bpf_eth_cbi *cbi; // information about installed BPF rx/tx callback
+	uint16_t rc;  // 
 
-	cbi = user_param;
-	bpf_eth_cbi_inuse(cbi);
-	rc = (cbi->cb != NULL) ?
+	cbi = user_param; 
+	bpf_eth_cbi_inuse(cbi); //  marks given callback as used by datapath
+	rc = (cbi->cb != NULL) ? 
 		pkt_filter_jit(&cbi->jit, pkt, nb_pkts, 1) :
 		nb_pkts;
 	bpf_eth_cbi_unuse(cbi);
@@ -393,6 +393,8 @@ bpf_tx_callback_mb_jit(__rte_unused uint16_t port, __rte_unused uint16_t queue,
 	return rc;
 }
 
+
+// 返回回调函数指针
 static rte_rx_callback_fn
 select_rx_callback(enum rte_bpf_arg_type type, uint32_t flags)
 {
@@ -569,7 +571,7 @@ bpf_eth_elf_load(struct bpf_eth_cbh *cbh, uint16_t port, uint16_t queue,
 	bc->bpf = bpf; // rte_bpf* 
 	bc->jit = jit; // rte_bpf_jit
 
-	if (cbh->type == BPF_ETH_RX)
+	if (cbh->type == BPF_ETH_RX){
 		// callback handle 
 		/* 
 			rte_eth_add_rx_callback rte_ethdev.h中定义，在rte_ethdev.c中实现
@@ -579,7 +581,9 @@ bpf_eth_elf_load(struct bpf_eth_cbh *cbh, uint16_t port, uint16_t queue,
 
 		*/
 		bc->cb = rte_eth_add_rx_callback(port, queue, frx, bc); 
-		// bc->key_num 
+	}
+		
+		
 	else
 		bc->cb = rte_eth_add_tx_callback(port, queue, ftx, bc);
 
@@ -587,9 +591,10 @@ bpf_eth_elf_load(struct bpf_eth_cbh *cbh, uint16_t port, uint16_t queue,
 		rc = -rte_errno;
 		rte_bpf_destroy(bpf);
 		bpf_eth_cbi_cleanup(bc);
-	} else
+	} else{
 		rc = 0;
-
+	}
+		
 	return rc;
 }
 

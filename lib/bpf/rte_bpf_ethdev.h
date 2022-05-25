@@ -86,6 +86,27 @@ rte_bpf_eth_rx_elf_load(uint16_t port, uint16_t queue,
 
 /**
  * Load BPF program from the ELF file and install callback to execute it
+ * on given RX port/queue.
+ * 
+ * @param port 
+ * 	The identifier of the ethernet port
+ * @param queue 
+ * 	The identifier of the RX queue on the given port
+ * @param prm 
+ * 	Parameters used to create and initialise the BPF execution context
+ * @param fname 
+ * 	Pathname for a ELF file. 
+ * @param sname 
+ * 	Name of the executable section within the file to load
+ * @return
+ * 	Zero on successful completion or negative error code otherwise. 
+ */
+int
+rte_bpf_eth_rx_elf_load_test(uint16_t port, uint16_t queue,
+	const struct rte_bpf_prm *prm, const char *fname, const char *sname);
+
+/**
+ * Load BPF program from the ELF file and install callback to execute it
  * on given TX port/queue.
  *
  * @param port

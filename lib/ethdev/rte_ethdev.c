@@ -4742,10 +4742,12 @@ rte_eth_add_rx_callback(uint16_t port_id, uint16_t queue_id,
 		rte_errno = EINVAL;
 		return NULL;
 	}
+	
+	// rte_ethdev.h中 struct rte_eth_rxtx_callback;
 	// 申请空间 
 	struct rte_eth_rxtx_callback *cb = rte_zmalloc(NULL, sizeof(*cb), 0);
 	// struct rte_eth_rxtx_callback **prev_cb;
-	// rte_ethdev.h中 struct rte_eth_rxtx_callback;
+
 
 	if (cb == NULL) {
 		rte_errno = ENOMEM;
@@ -4761,6 +4763,7 @@ rte_eth_add_rx_callback(uint16_t port_id, uint16_t queue_id,
 	*/
 	cb->fn.rx = fn; // fn
 	cb->param = user_param;
+	// cb->key_num = 
 	
 
 	rte_spinlock_lock(&eth_dev_rx_cb_lock);
