@@ -91,7 +91,7 @@ static void bpf_callback_rx(const char *fname, uint16_t port, uint16_t queue, co
         uint32_t flags;
         struct rte_bpf_prm prm;
         struct rte_bpf_arg arg;
-        //struct hash_mbuf my_par; // rte_mbuf_core.h 
+        // struct hash_mbuf my_par; // rte_mbuf_core.h 
 
         flags = RTE_BPF_ETH_F_NONE;
         flags |= RTE_BPF_ETH_F_JIT;

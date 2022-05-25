@@ -453,7 +453,7 @@ select_rx_callback(enum rte_bpf_arg_type type, uint32_t flags)
 {
 	if (flags & RTE_BPF_ETH_F_JIT) { // jit
 		if (type == RTE_BPF_ARG_PTR) // pointer to data buffer
-			return bpf_rx_callback_jit; 
+			return bpf_rx_callb(ack_jit; 
 		else if (type == RTE_BPF_ARG_PTR_MBUF) // pointer to rte_mbuf
 			return bpf_rx_callback_mb_jit;
 	} else if (type == RTE_BPF_ARG_PTR) // point to data buffer
@@ -672,7 +672,7 @@ bpf_eth_elf_load_test(struct bpf_eth_cbh *cbh, uint16_t port, uint16_t queue,
     
     // flags & RTE_BPF_ETH_F_JIT 
     // rte_bpf_arg_type type == RTE_BPF_ARG_PTR pointer to data buffer
-    frx = bpf_rx_callback_jit_test; 
+    frx = (rte_rx_callback_fn)bpf_rx_callback_jit_test; 
 
     if(frx == NULL){
         RTE_BPF_LOG(ERR, "%s(%u, %u): no callback selected;\n",
@@ -723,7 +723,7 @@ bpf_eth_elf_load_test(struct bpf_eth_cbh *cbh, uint16_t port, uint16_t queue,
 
 ////////////////////////////////////////////////////////////////////////
 int
-rte_bpf_eth_rx_elf_load(uint16_t port, uint16_t queue,
+rte_bpf_eth_rx_elf_load(ugitint16_t port, uint16_t queue,
 	const struct rte_bpf_prm *prm, const char *fname, const char *sname,
 	uint32_t flags)
 {
@@ -756,6 +756,8 @@ rte_bpf_eth_rx_elf_load_test(uint16_t port, uint16_t queue,
         return rc;
 }
 //////////////////////////////////////////////////////////////////////
+
+
 int
 rte_bpf_eth_tx_elf_load(uint16_t port, uint16_t queue,
 	const struct rte_bpf_prm *prm, const char *fname, const char *sname,
