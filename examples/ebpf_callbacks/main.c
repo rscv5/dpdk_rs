@@ -96,13 +96,13 @@ static void bpf_callback_rx(const char *fname, uint16_t port, uint16_t queue, co
         flags = RTE_BPF_ETH_F_NONE;
         flags |= RTE_BPF_ETH_F_JIT;
 
-        arg.type = RTE_BPF_ARG_PTR_MBUF; // pointer to data buffer 
-        arg.size = sizeof(struct rte_mbuf);
-        arg.buf_size = RTE_MBUF_DEFAULT_BUF_SIZE; // 每个mbuf的数据缓冲区大小
+        // arg.type = RTE_BPF_ARG_PTR_MBUF; // pointer to data buffer 
+        // arg.size = sizeof(struct rte_mbuf);
+        // arg.buf_size = RTE_MBUF_DEFAULT_BUF_SIZE; // 每个mbuf的数据缓冲区大小
 
-        // arg.type = RTE_BPF_ARG_PTR; // pointer to data buffer
-        // arg.size = sizeof(struct hash_mbuf);
-        // arg.buf_size = RTE_MBUF_DEFAULT_BUF_SIZE; // 每个mbuf的数据缓冲区的大小
+        arg.type = RTE_BPF_ARG_PTR; // pointer to data buffer
+        arg.size = sizeof(struct hash_mbuf);
+        arg.buf_size = RTE_MBUF_DEFAULT_BUF_SIZE; // 每个mbuf的数据缓冲区的大小
 
         memset(&prm, 0, sizeof(prm));
         prm.xsym = bpf_xsym;
@@ -110,9 +110,9 @@ static void bpf_callback_rx(const char *fname, uint16_t port, uint16_t queue, co
         prm.prog_arg = arg;
 
         //printf(">>>>>>>>>");
-        rc = rte_bpf_eth_rx_elf_load(port, queue, &prm, fname, sname, flags);
+        // rc = rte_bpf_eth_rx_elf_load(port, queue, &prm, fname, sname, flags);
         // rte_bpf_ethdev.h bpf_load_test.c
-        //rc = rte_bpf_eth_rx_elf_load_test(port, queue, &prm, fname, sname);
+        rc = rte_bpf_eth_rx_elf_load_test(port, queue, &prm, fname, sname, flags);
         printf("%d:%s\n",rc, strerror(-rc));       
 }
 
